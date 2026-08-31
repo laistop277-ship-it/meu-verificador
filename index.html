@@ -19,7 +19,6 @@
         textarea:focus { border-color: #0284c7; box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15); }
         .btn-analyze { background-color: #0284c7; color: white; font-weight: 700; padding: 12px 20px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.95rem; margin-bottom: 20px; display: inline-flex; align-items: center; gap: 8px; transition: background-color 0.2s; }
         .btn-analyze:hover { background-color: #0369a1; }
-        .btn-analyze:disabled { background-color: #94a3b8; cursor: not-allowed; }
         .result-panel { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 18px; display: block; }
         .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
         .badge { padding: 4px 10px; border-radius: 4px; font-weight: 700; font-size: 0.85rem; display: inline-block; }
@@ -48,7 +47,7 @@
     <div class="container">
         <div class="header-bar">
             <h1>GRUPO III — Protótipo de Verificação de Fake News</h1>
-            <p>Sistema Interativo de Análise de Credibilidade com Inteligência Artificial em Tempo Real</p>
+            <p>Sistema Interativo de Análise de Credibilidade e Detecção em Tempo Real</p>
         </div>
 
         <div class="content">
@@ -58,8 +57,8 @@
                 <div class="input-label">ENTRADA DO USUÁRIO (TEXTO OU LINK PARA CHECAGEM):</div>
                 <textarea id="inputText" placeholder="Cole a notícia, mensagem ou alegação aqui..."></textarea>
                 
-                <button class="btn-analyze" id="btnAnalyze" onclick="analisarComIAPublica()">
-                    <span>🔍</span> ANALISAR CONFIABILIDADE COM IA
+                <button class="btn-analyze" id="btnAnalyze" onclick="analisarRegrasLocais()">
+                    <span>🔍</span> ANALISAR CONFIABILIDADE
                 </button>
 
                 <div class="result-panel">
@@ -72,9 +71,9 @@
                         <div id="scoreBar" class="score-bar-fill" style="width: 0%;"></div>
                     </div>
 
-                    <span class="diagnosis-title">Diagnóstico Detalhado da IA:</span>
+                    <span class="diagnosis-title">Diagnóstico Detalhado da Análise:</span>
                     <ul id="diagnosisList" class="diagnosis-list">
-                        <li>Digite ou cole uma informação acima para checar em tempo real.</li>
+                        <li>Digite ou cole um texto acima e clique em analisar.</li>
                     </ul>
                 </div>
             </div>
@@ -86,7 +85,7 @@
                         <th>ID</th>
                         <th>Afirmação / Notícia Testada</th>
                         <th>Categoria</th>
-                        <th>Classificação IA</th>
+                        <th>Classificação</th>
                         <th>Score Risco</th>
                         <th>Status</th>
                     </tr>
@@ -120,7 +119,7 @@
                 </div>
                 <div class="metric-card">
                     <h4>Tempo de Análise</h4>
-                    <div class="val">1.4s</div>
+                    <div class="val">0.3s</div>
                     <p>Velocidade média de resposta.</p>
                 </div>
                 <div class="metric-card">
@@ -134,12 +133,12 @@
     </div>
 
     <script>
-        async function analisarComIAPublica() {
-            const text = document.getElementById('inputText').value.trim();
-            const btn = document.getElementById('btnAnalyze');
+        function analisarRegrasLocais() {
+            const rawText = document.getElementById('inputText').value;
+            const text = rawText.toLowerCase().trim();
             const badge = document.getElementById('badgeVerdict');
             const riskText = document.getElementById('riskText');
-            textScoreBar = document.getElementById('scoreBar');
+            const scoreBar = document.getElementById('scoreBar');
             const diagnosisList = document.getElementById('diagnosisList');
 
             if (!text) {
@@ -147,73 +146,58 @@
                 return;
             }
 
-            btn.innerText = '⏳ Consultando Servidor de IA...';
-            btn.disabled = true;
+            let score = 10;
+            let motivos = [];
 
-            const prompt = `Analise a veracidade do seguinte texto em português: "${text}".
-            Responda em JSON estrito sem formatação adicional:
-            {"veredit": "FALSO", "risk": 85, "reasons": ["Motivo 1 em português", "Motivo 2 em português"]}
-            Nota: Em veredit use apenas FALSO, VERDADEIRO ou IMPRECISO. Em risk use um número de 0 a 100.`;
+            // Palavras e padrões suspeitos
+            const palavrasAlerta = ["urgente", "secreta", "canetada", "cura milagrosa", "revelado", "bomba", "atenção", "compartilhe antes que apaguem", "absurdo"];
+            const fontesOficiais = ["ministério da saúde", "banco central", "fiocruz", "g1", "gov.br", "anvisa", "uol", "estadao"];
 
-            try {
-                // Endpoint público sem necessidade de chave
-                const response = await fetch("https://text.pollinations.ai/", {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        messages: [{ role: 'user', content: prompt }],
-                        model: 'openai',
-                        jsonMode: true
-                    })
-                });
+            let encontradasAlerta = palavrasAlerta.filter(p => text.includes(p));
+            let encontradasFontes = fontesOficiais.filter(f => text.includes(f));
 
-                const rawText = await response.text();
-                // Extrai o JSON da resposta
-                const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-                
-                if (!jsonMatch) {
-                    throw new Error("Falha ao formatar resposta.");
-                }
+            if (encontradasAlerta.length > 0) {
+                score += encontradasAlerta.length * 25;
+                motivos.push(`<strong>Linguagem Sensacionalista:</strong> Contém termos apelativos/alarmistas (${encontradasAlerta.join(', ')}).`);
+            }
 
-                const result = JSON.parse(jsonMatch[0]);
+            if (rawText.includes('!') || rawText.includes('?')) {
+                score += 15;
+                motivos.push(`<strong>Pontuação Excessiva:</strong> Uso reiterado de exclamações/interrogações para reforçar apelo emocional.`);
+            }
 
-                const risk = result.risk || 50;
-                const veredit = (result.veredit || "IMPRECISO").toUpperCase();
-                const reasons = result.reasons || ["Análise realizada com base em padrões de linguagem e checagem de fontes."];
+            if (encontradasFontes.length > 0) {
+                score -= 30;
+                motivos.push(`<strong>Fonte Reconhecida Citada:</strong> Menciona veículos/órgãos conhecidos (${encontradasFontes.join(', ')}).`);
+            } else {
+                score += 20;
+                motivos.push(`<strong>Ausência de Referências Diretas:</strong> Não foram identificados links ou menções explícitas a fontes governamentais ou de imprensa.`);
+            }
 
-                textScoreBar.style.width = risk + '%';
-                riskText.innerText = 'Índice de Risco: ' + risk + '%';
+            if (score > 95) score = 95;
+            if (score < 5) score = 5;
 
-                if (veredit.includes('FALSO')) {
-                    badge.className = 'badge badge-danger';
-                    badge.innerText = 'ALTA PROBABILIDADE DE FAKE NEWS';
-                    textScoreBar.style.backgroundColor = '#ef4444';
-                    riskText.style.color = '#dc2626';
-                } else if (veredit.includes('IMPRECISO')) {
-                    badge.className = 'badge badge-warning';
-                    badge.innerText = 'INFORMAÇÃO SUSPEITA / IMPRECISA';
-                    textScoreBar.style.backgroundColor = '#f59e0b';
-                    riskText.style.color = '#d97706';
-                } else {
-                    badge.className = 'badge badge-success';
-                    badge.innerText = 'BAIXO RISCO DE DESINFORMAÇÃO';
-                    textScoreBar.style.backgroundColor = '#22c55e';
-                    riskText.style.color = '#16a34a';
-                }
+            scoreBar.style.width = score + '%';
+            riskText.innerText = 'Índice de Risco: ' + score + '%';
 
-                diagnosisList.innerHTML = reasons.map(r => `<li><strong>Diagnóstico da IA:</strong> ${r}</li>`).join('');
-
-            } catch (err) {
-                // Tratamento de contingência para evitar que a tela fique travada
-                textScoreBar.style.width = '75%';
-                riskText.innerText = 'Índice de Risco: 75%';
+            if (score >= 60) {
+                badge.className = 'badge badge-danger';
+                badge.innerText = 'ALTA PROBABILIDADE DE FAKE NEWS';
+                scoreBar.style.backgroundColor = '#ef4444';
+                riskText.style.color = '#dc2626';
+            } else if (score >= 35) {
                 badge.className = 'badge badge-warning';
                 badge.innerText = 'INFORMAÇÃO SUSPEITA / IMPRECISA';
-                diagnosisList.innerHTML = '<li><strong>Análise de Padrão:</strong> O conteúdo apresenta elementos típicos de sensacionalismo ou falta de confirmação em fontes oficiais.</li><li><strong>Recomendação:</strong> Verifique o fato em portais de checagem confiáveis.</li>';
-            } finally {
-                btn.innerText = '🔍 ANALISAR CONFIABILIDADE COM IA';
-                btn.disabled = false;
+                scoreBar.style.backgroundColor = '#f59e0b';
+                riskText.style.color = '#d97706';
+            } else {
+                badge.className = 'badge badge-success';
+                badge.innerText = 'BAIXO RISCO DE DESINFORMAÇÃO';
+                scoreBar.style.backgroundColor = '#22c55e';
+                riskText.style.color = '#16a34a';
             }
+
+            diagnosisList.innerHTML = motivos.map(m => `<li>${m}</li>`).join('');
         }
     </script>
 </body>
